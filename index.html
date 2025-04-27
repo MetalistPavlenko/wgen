@@ -2,11 +2,21 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>WARP</title>
+  <title>WGEN</title>
   <script src="https://cdn.jsdelivr.net/npm/tweetnacl@latest/nacl.min.js"></script>
 </head>
 <body>
   <p id="loadingMessage">Loading...</p>
+  <div id="errorMessage" style="display:none;">
+    <p>You need to activate the CORS proxy:</p>
+    <ol>
+      <li>Open the <a href="https://cors-anywhere.herokuapp.com/corsdemo" target="_blank">activation page</a></li>
+      <li>Click the "Request temporary access to the demo server"</li>
+      <li>Go back to this page</li>
+      <li>Refresh the page</li>
+      <li>If you still see this, then the request limit has been exceeded, wait 1 minute and try again</li>
+    </ol>
+  </div>
   <pre id="output"></pre>
   <button id="downloadBtn" style="display:none;">Download config</button>
   <script>
@@ -40,6 +50,11 @@
         })
       });
 
+      if (!response.ok) {
+        document.getElementById('loadingMessage').style.display = 'none';
+        document.getElementById('errorMessage').style.display = 'block';
+      }
+
       return await response.json();
     }
 
@@ -53,6 +68,7 @@
       const publicKeyB64 = encodeBase64(keyPair.publicKey);
 
       const data = await register(publicKeyB64);
+
       const { ipv4, ipv6 } = await fetchSubnets();
 
       const config = `[Interface]
