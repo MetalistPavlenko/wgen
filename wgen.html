@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>WARP</title>
+  <script src="https://cdn.jsdelivr.net/npm/tweetnacl@latest/nacl.min.js"></script>
+</head>
+<body>
+  <p id="loadingMessage">Loading...</p>
+  <pre id="output"></pre>
+  <button id="downloadBtn" style="display:none;">Download config</button>
+  <script>
+    function encodeBase64(u8) {
+      const bin = Array.from(u8, b => String.fromCharCode(b)).join('');
+      return btoa(bin);
+    }
+
+    async function fetchSubnets() {
+      const ipv4Response = await fetch('https://raw.githubusercontent.com/MetalistPavlenko/UASubnetsBlock/main/IPv4.txt');
+      const ipv6Response = await fetch('https://raw.githubusercontent.com/MetalistPavlenko/UASubnetsBlock/main/IPv6.txt');
+      const ipv4Subnets = await ipv4Response.text();
+      const ipv6Subnets = await ipv6Response.text();
+      return {
+        ipv4: ipv4Subnets.trim().split('\n'),
+        ipv6: ipv6Subnets.trim().split('\n')
+      };
+    }
+
+    async function register(publicKeyB64) {
+      const response = await fetch('https://cors-anywhere.herokuapp.com/https://api.cloudflareclient.com/v0a2158/reg', {
+        method: 'POST',
+        headers: {
+          'User-Agent': 'okhttp/3.12.1',
+          'CF-Client-Version': 'a-7.21-0721',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          key: publicKeyB64,
+          tos: new Date().toISOString().replace(/\.\d+Z$/, '.000Z')
+        })
+      });
+
+      return await response.json();
+    }
+
+    async function main() {
+      const output = document.getElementById('output');
+      const loadingMessage = document.getElementById('loadingMessage');
+      const downloadBtn = document.getElementById('downloadBtn');
+
+      const keyPair = nacl.box.keyPair();
+      const privateKeyB64 = encodeBase64(keyPair.secretKey);
+      const publicKeyB64 = encodeBase64(keyPair.publicKey);
+
+      const data = await register(publicKeyB64);
+      const { ipv4, ipv6 } = await fetchSubnets();
+
+      const config = `[Interface]
+PrivateKey = ${privateKeyB64}
+Address = ${data.config.interface.addresses.v4}/32,${data.config.interface.addresses.v6}/128
+
+[Peer]
+PublicKey = ${data.config.peers[0].public_key}
+AllowedIPs = ${ipv4.join(',')},${ipv6.join(',')}
+Endpoint = ${data.config.peers[0].endpoint.host}
+PersistentKeepalive = 25`;
+
+      const displayConfig = config.replace(/AllowedIPs\s*=\s*([^\n]+)/, 'AllowedIPs = 0.0.0.0/0,::/0');
+      output.textContent = displayConfig;
+
+      loadingMessage.style.display = 'none';
+      downloadBtn.style.display = 'inline';
+
+      downloadBtn.addEventListener('click', function() {
+        const blob = new Blob([config], { type: 'text/plain' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = 'wg0.conf';
+        link.click();
+      });
+    }
+
+    window.onload = main;
+  </script>
+</body>
+</html>
