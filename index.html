@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>WGEN</title>
+</head>
+<body>
+  <p id="loadingMessage">Loading...</p>
+  <pre id="output"></pre>
+  <button id="downloadBtn" style="display:none;">Download config</button>
+  <script>
+    const output = document.getElementById('output');
+    const loadingMessage = document.getElementById('loadingMessage');
+    const downloadBtn = document.getElementById('downloadBtn');
+
+    fetch('https://raw.githubusercontent.com/MetalistPavlenko/UASubnetsBlock/main/IPv4.txt')
+      .then(resp => resp.text())
+      .then(ipv4SubnetsRaw => {
+
+        fetch('https://raw.githubusercontent.com/MetalistPavlenko/UASubnetsBlock/main/IPv6.txt')
+          .then(resp => resp.text())
+          .then(ipv6SubnetsRaw => {
+            const ipv4 = ipv4SubnetsRaw.trim().split('\n');
+            const ipv6 = ipv6SubnetsRaw.trim().split('\n');
+
+            fetch('https://keygen.warp-generator.workers.dev')
+              .then(response => response.text())
+              .then(text => {
+                const publicKey = text.match(/PublicKey: (\S+)/)[1];
+                const privateKey = text.match(/PrivateKey: (\S+)/)[1];
+
+                return fetch('https://www.warp-generator.workers.dev/wg', {
+                  method: 'POST',
+                  headers: {
+                    'User-Agent': 'okhttp/3.12.1',
+                    'CF-Client-Version': 'a-7.21-0721',
+                    'Content-Type': 'application/json'
+                  },
+                  body: JSON.stringify({
+                    key: publicKey,
+                    tos: new Date().toISOString().replace(/\.\d+Z$/, '.000Z')
+                  })
+                })
+                .then(response => response.json())
+                .then(data => ({ data, privateKey }));
+              })
+              .then(({ data, privateKey }) => {
+                const config = `[Interface]
+PrivateKey = ${privateKey}
+Address = ${data.config.interface.addresses.v4}/32,${data.config.interface.addresses.v6}/128
+
+[Peer]
+PublicKey = ${data.config.peers[0].public_key}
+AllowedIPs = ${ipv4.join(',')},${ipv6.join(',')}
+Endpoint = ${data.config.peers[0].endpoint.host}
+PersistentKeepalive = 25`;
+
+                const displayedCfg = config.replace(/AllowedIPs\s*=\s*([^\n]+)/, 'AllowedIPs = 0.0.0.0/0,::/0');
+                output.textContent = displayedCfg;
+                loadingMessage.style.display = 'none';
+                downloadBtn.style.display = 'inline';
+
+                downloadBtn.addEventListener('click', () => {
+                  const blob = new Blob([config], { type: 'application/octet-stream' });
+                  const link = document.createElement('a');
+                  link.href = URL.createObjectURL(blob);
+                  link.download = 'wg0.conf';
+                  link.click();
+                });
+              });
+          });
+      });
+  </script>
+</body>
+</html>
